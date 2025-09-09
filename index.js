@@ -19,8 +19,8 @@ mongoose.connect(process.env.MONGO_URI)
 // Nodemailer setup
 const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
-    port: 465,        // SSL
-    secure: true,     // true for 465, false for 587
+    port: 587,       // TLS port
+    secure: false,    // true for 465, false for 587
     auth: {
         user: process.env.EMAIL_USER,   // your Gmail address
         pass: process.env.EMAIL_PASS,   // your Gmail App Password
@@ -58,7 +58,7 @@ cron.schedule("* * * * *", async () => {
                     msgDate.getTime() >= currentMinuteUTC.getTime() - 60000) {
 
                     try {
-                       const info =  await transporter.sendMail({
+                        const info = await transporter.sendMail({
                             from: `"Message Scheduler" <${process.env.EMAIL_USER}>`,
                             to: "haseeb516m@gmail.com",
                             subject: "Scheduled Message",
