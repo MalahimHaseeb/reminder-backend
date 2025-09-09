@@ -11,55 +11,36 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// Enhanced MongoDB connection with better error handling
+// MongoDB connection
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ MongoDB connected"))
-    .catch((err) => {
-        console.error("❌ MongoDB connection error:", err);
-        process.exit(1); // Exit process on DB connection failure
-    });
+    .catch((err) => console.error("❌ MongoDB error:", err));
 
-// Nodemailer setup with debug logging
-const transporter = nodemailer.createTransporter({
+// Nodemailer setup - FIXED THE FUNCTION NAME
+const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        user: process.env.EMAIL_USER,   // your Gmail address
+        pass: process.env.EMAIL_PASS,   // your Gmail App Password
     },
-    debug: true, // Enable debug output
-    logger: true // Enable logger
 });
 
-// Verify transporter configuration
-transporter.verify(function(error, success) {
-    if (error) {
-        console.error('❌ Transporter verification failed:', error);
-    } else {
-        console.log('✅ Transporter is ready to send emails');
-    }
-});
-
-// Enhanced cron job with better error handling
+// 🕒 Cron job runs every minute
 cron.schedule("* * * * *", async () => {
-    console.log("⏰ Running cron job...");
-    
-    try {
-        const nowUTC = new Date();
-        const nowPakistan = new Date(nowUTC.getTime() + (5 * 60 * 60 * 1000));
-        console.log("Current time (UTC):", nowUTC.toISOString());
-        console.log("Current time (Pakistan):", nowPakistan.toLocaleString("en-US", { timeZone: "Asia/Karachi" }));
+    const nowUTC = new Date();
+    const nowPakistan = new Date(nowUTC.getTime() + (5 * 60 * 60 * 1000)); // UTC+5
+    console.log("⏰ Running cron job...", nowPakistan.toLocaleString("en-US", { timeZone: "Asia/Karachi" }));
 
-        // Round to the nearest minute
+    try {
+        // Round to the nearest minute to avoid missing messages due to second differences
         const currentMinuteUTC = new Date(nowUTC);
         currentMinuteUTC.setSeconds(0, 0);
-        
-        const oneMinuteAgoUTC = new Date(currentMinuteUTC.getTime() - 60000);
 
         // 1️⃣ Find messages that need sending
         const messagesToSend = await Message.find({
             scheduledDate: {
-                $gte: oneMinuteAgoUTC,
-                $lte: currentMinuteUTC
+                $lte: currentMinuteUTC,
+                $gte: new Date(currentMinuteUTC.getTime() - 60000) // Check within the last minute too
             },
             isSend: false,
         });
@@ -68,38 +49,106 @@ cron.schedule("* * * * *", async () => {
 
         for (const msg of messagesToSend) {
             try {
-                console.log(`Processing message: ${msg._id}, scheduled for: ${msg.scheduledDate}`);
-                
-                // Send email
-                const mailOptions = {
-                    from: `"Message Scheduler" <${process.env.EMAIL_USER}>`,
-                    to: "haseeb516m@gmail.com",
-                    subject: "Scheduled Message",
-                    html: `... your email template ...`
-                };
+                // Check if the message is exactly at the scheduled minute
+                const msgDate = new Date(msg.scheduledDate);
+                if (msgDate.getTime() <= currentMinuteUTC.getTime() &&
+                    msgDate.getTime() >= currentMinuteUTC.getTime() - 60000) {
 
-                const info = await transporter.sendMail(mailOptions);
-                console.log("📩 Email sent successfully:", info.messageId);
+                    try {
+                        const info = await transporter.sendMail({
+                            from: `"Message Scheduler" <${process.env.EMAIL_USER}>`,
+                            to: "haseeb516m@gmail.com",
+                            subject: "Scheduled Message",
+                            html: `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 0;
+          padding: 0;
+          background-color: #f4f4f7;
+        }
+        .container {
+          max-width: 600px;
+          margin: 20px auto;
+          background-color: #ffffff;
+          border-radius: 10px;
+          box-shadow: 0 0 10px rgba(0,0,0,0.1);
+          overflow: hidden;
+        }
+        .header {
+          background-color: #4f46e5;
+          color: #ffffff;
+          text-align: center;
+          padding: 20px;
+          font-size: 24px;
+          font-weight: bold;
+        }
+        .content {
+          padding: 20px;
+          font-size: 16px;
+          color: #333333;
+          line-height: 1.5;
+        }
+        .footer {
+          padding: 10px 20px;
+          text-align: center;
+          font-size: 12px;
+          color: #999999;
+          border-top: 1px solid #eeeeee;
+        }
+        @media only screen and (max-width: 600px) {
+          .container {
+            width: 95%;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">📩 Scheduled Message</div>
+        <div class="content">
+          <p>Hello,</p>
+          <p>Here is your scheduled message:</p>
+          <blockquote style="background:#f9f9f9;padding:10px;border-left:5px solid #4f46e5;">
+            ${msg.message}
+          </blockquote>
+          <p>Sent at: ${nowPakistan}</p>
+        </div>
+        <div class="footer">Message Scheduler • Your automated reminder system</div>
+      </div>
+    </body>
+    </html>
+    `
+                        });
 
-                // Mark as sent
-                msg.isSend = true;
+                        console.log("📩 Email actually sent:", info.messageId);
+                    } catch (error) {
+                        console.error("❌ Failed to send email:", error);
+                    }
 
-                if (msg.sendDaily) {
-                    // extend by 1 day and reset send status
-                    msg.scheduledDate = addDays(msg.scheduledDate, 1);
-                    msg.isSend = false;
-                    console.log(`🔁 Rescheduled daily message for next day: ${msg.scheduledDate}`);
+                    // Mark as sent
+                    msg.isSend = true;
+
+                    if (msg.sendDaily) {
+                        // extend by 1 day and reset send status
+                        msg.scheduledDate = addDays(msg.scheduledDate, 1);
+                        msg.isSend = false;
+                        console.log(`🔁 Rescheduled daily message for next day`);
+                    }
+
+                    await msg.save();
                 }
-
-                await msg.save();
-                
             } catch (err) {
-                console.error(`❌ Failed to process message ${msg._id}:`, err);
-                // Don't break the loop, continue with other messages
+                console.error(`❌ Failed to send email for message ${msg._id}:`, err);
             }
         }
 
-        // 2️⃣ Delete expired one-time messages
+        // 2️⃣ Delete only expired one-time messages (older than 1 day)
         const oneDayAgo = new Date();
         oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
@@ -113,17 +162,8 @@ cron.schedule("* * * * *", async () => {
             console.log(`🗑️ Deleted ${deleted.deletedCount} expired one-time messages`);
         }
     } catch (err) {
-        console.error("❌ Cron job error:", err);
+        console.error("❌ Cron error:", err);
     }
-});
-
-// Health check endpoint
-app.get("/health", (req, res) => {
-    res.json({ 
-        status: "OK", 
-        time: new Date().toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-    });
 });
 
 // Basic API route
