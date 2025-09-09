@@ -12,23 +12,21 @@ const app = express();
 app.use(express.json());
 
 // MongoDB connection
-mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
+mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ MongoDB connected"))
     .catch((err) => console.error("❌ MongoDB error:", err));
 
 // Nodemailer setup
 const transporter = nodemailer.createTransport({
-    host: "smtp.hostinger.com",
-    port: 465,
-    secure: true,
+    host: "smtp.gmail.com",
+    port: 465,        // SSL
+    secure: true,     // true for 465, false for 587
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        user: process.env.EMAIL_USER,   // your Gmail address
+        pass: process.env.EMAIL_PASS,   // your Gmail App Password
     },
 });
+
 
 // 🕒 Cron job runs every minute
 cron.schedule("* * * * *", async () => {
@@ -59,14 +57,12 @@ cron.schedule("* * * * *", async () => {
                 if (msgDate.getTime() <= currentMinuteUTC.getTime() &&
                     msgDate.getTime() >= currentMinuteUTC.getTime() - 60000) {
 
-                    // Your email sending code here
-                    console.log(`📩 Email sent: ${msg.message} at ${nowPakistan.toLocaleString("en-US", { timeZone: "Asia/Karachi" })}`);
-
-                    await transporter.sendMail({
-                        from: `"Message Scheduler" <reminder@malahim.dev>`,
-                        to: "haseeb516m@gmail.com",
-                        subject: "Scheduled Message",
-                        html: `
+                    try {
+                       const info =  await transporter.sendMail({
+                            from: `"Message Scheduler" <${process.env.EMAIL_USER}>`,
+                            to: "haseeb516m@gmail.com",
+                            subject: "Scheduled Message",
+                            html: `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -124,14 +120,19 @@ cron.schedule("* * * * *", async () => {
           <blockquote style="background:#f9f9f9;padding:10px;border-left:5px solid #4f46e5;">
             ${msg.message}
           </blockquote>
-          <p>Sent at: ${nowPakistan.toLocaleString("en-US", { timeZone: "Asia/Karachi" })}</p>
+          <p>Sent at: ${nowPakistan}</p>
         </div>
         <div class="footer">Message Scheduler • Your automated reminder system</div>
       </div>
     </body>
     </html>
     `
-                    });
+                        });
+
+                        console.log("📩 Email actually sent:", info.messageId);
+                    } catch (error) {
+                        console.error("❌ Failed to send email:", error);
+                    }
 
                     // Mark as sent
                     msg.isSend = true;
