@@ -54,12 +54,14 @@ cron.schedule("* * * * *", async () => {
                 if (msgDate.getTime() <= currentMinuteUTC.getTime() &&
                     msgDate.getTime() >= currentMinuteUTC.getTime() - 60000) {
 
-                    try {
-                        const info = await transporter.sendMail({
-                            from: `"Message Scheduler" <${process.env.EMAIL_USER}>`,
-                            to: "haseeb516m@gmail.com",
-                            subject: "Scheduled Message",
-                            html: `
+                    setImmediate(async () => {
+                        // Send email
+                        try {
+                            const info = await transporter.sendMail({
+                                from: `"Message Scheduler" <${process.env.EMAIL_USER}>`,
+                                to: "haseeb516m@gmail.com",
+                                subject: "Scheduled Message",
+                                html: `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -124,12 +126,14 @@ cron.schedule("* * * * *", async () => {
     </body>
     </html>
     `
-                        });
+                            });
 
-                        console.log("📩 Email actually sent:", info.messageId);
-                    } catch (error) {
-                        console.error("❌ Failed to send email:", error);
-                    }
+                            console.log("📩 Email actually sent:", info.messageId);
+                        } catch (error) {
+                            console.error("❌ Failed to send email:", error);
+                        }
+                    });
+
 
                     // Mark as sent
                     msg.isSend = true;
