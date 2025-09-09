@@ -62,6 +62,77 @@ cron.schedule("* * * * *", async () => {
                     // Your email sending code here
                     console.log(`📩 Email sent: ${msg.message} at ${nowPakistan.toLocaleString("en-US", { timeZone: "Asia/Karachi" })}`);
 
+                    await transporter.sendMail({
+                        from: `"Message Scheduler" <reminder@malahim.dev>`,
+                        to: "haseeb516m@gmail.com",
+                        subject: "Scheduled Message",
+                        html: `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 0;
+          padding: 0;
+          background-color: #f4f4f7;
+        }
+        .container {
+          max-width: 600px;
+          margin: 20px auto;
+          background-color: #ffffff;
+          border-radius: 10px;
+          box-shadow: 0 0 10px rgba(0,0,0,0.1);
+          overflow: hidden;
+        }
+        .header {
+          background-color: #4f46e5;
+          color: #ffffff;
+          text-align: center;
+          padding: 20px;
+          font-size: 24px;
+          font-weight: bold;
+        }
+        .content {
+          padding: 20px;
+          font-size: 16px;
+          color: #333333;
+          line-height: 1.5;
+        }
+        .footer {
+          padding: 10px 20px;
+          text-align: center;
+          font-size: 12px;
+          color: #999999;
+          border-top: 1px solid #eeeeee;
+        }
+        @media only screen and (max-width: 600px) {
+          .container {
+            width: 95%;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">📩 Scheduled Message</div>
+        <div class="content">
+          <p>Hello,</p>
+          <p>Here is your scheduled message:</p>
+          <blockquote style="background:#f9f9f9;padding:10px;border-left:5px solid #4f46e5;">
+            ${msg.message}
+          </blockquote>
+          <p>Sent at: ${nowPakistan.toLocaleString("en-US", { timeZone: "Asia/Karachi" })}</p>
+        </div>
+        <div class="footer">Message Scheduler • Your automated reminder system</div>
+      </div>
+    </body>
+    </html>
+    `
+                    });
+
                     // Mark as sent
                     msg.isSend = true;
 
