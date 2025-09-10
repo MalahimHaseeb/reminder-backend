@@ -1,9 +1,9 @@
 import express from "express";
 import mongoose from "mongoose";
 import cron from "node-cron";
-import nodemailer from "nodemailer";
 import { addDays } from "date-fns";
 import dotenv from "dotenv";
+import { Client, GatewayIntentBits } from "discord.js";
 import Message from "./models/Message.js";
 
 dotenv.config();
@@ -16,24 +16,50 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ MongoDB connected"))
     .catch((err) => console.error("❌ MongoDB error:", err));
 
-// Nodemailer setup - FIXED THE FUNCTION NAME
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,   // your Gmail address
-        pass: process.env.EMAIL_PASS,   // your Gmail App Password
-    },
+// Discord bot setup
+const discordClient = new Client({ 
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent
+    ] 
 });
+
+discordClient.once('ready', () => {
+    console.log(`✅ Discord bot logged in as ${discordClient.user.tag}`);
+});
+
+// Login to Discord
+discordClient.login(process.env.DISCORD_BOT_TOKEN).catch(error => {
+    console.error("❌ Failed to log in to Discord:", error);
+});
+
+// Function to send Discord message
+async function sendDiscordMessage(userId, messageContent) {
+    try {
+        // Check if the client is ready
+        if (!discordClient.isReady()) {
+            console.log("⚠️ Discord client not ready yet, waiting...");
+            return false;
+        }
+        
+        const user = await discordClient.users.fetch(userId);
+        await user.send(messageContent);
+        console.log(`✅ Discord message sent to ${user.tag}`);
+        return true;
+    } catch (error) {
+        console.error("❌ Failed to send Discord message:", error);
+        return false;
+    }
+}
 
 // 🕒 Cron job runs every minute
 cron.schedule("* * * * *", async () => {
-    const nowUTC = new Date();
-    const nowPakistan = new Date(nowUTC.getTime() + (5 * 60 * 60 * 1000)); // UTC+5
-    console.log("⏰ Running cron job...", nowPakistan.toLocaleString("en-US", { timeZone: "Asia/Karachi" }));
+    console.log("⏰ Running cron job...");
 
     try {
         // Round to the nearest minute to avoid missing messages due to second differences
-        const currentMinuteUTC = new Date(nowUTC);
+        const currentMinuteUTC = new Date();
         currentMinuteUTC.setSeconds(0, 0);
 
         // 1️⃣ Find messages that need sending
@@ -54,86 +80,11 @@ cron.schedule("* * * * *", async () => {
                 if (msgDate.getTime() <= currentMinuteUTC.getTime() &&
                     msgDate.getTime() >= currentMinuteUTC.getTime() - 60000) {
 
-                    setImmediate(async () => {
-                        // Send email
-                        try {
-                            const info = await transporter.sendMail({
-                                from: `"Message Scheduler" <${process.env.EMAIL_USER}>`,
-                                to: "haseeb516m@gmail.com",
-                                subject: "Scheduled Message",
-                                html: `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          margin: 0;
-          padding: 0;
-          background-color: #f4f4f7;
-        }
-        .container {
-          max-width: 600px;
-          margin: 20px auto;
-          background-color: #ffffff;
-          border-radius: 10px;
-          box-shadow: 0 0 10px rgba(0,0,0,0.1);
-          overflow: hidden;
-        }
-        .header {
-          background-color: #4f46e5;
-          color: #ffffff;
-          text-align: center;
-          padding: 20px;
-          font-size: 24px;
-          font-weight: bold;
-        }
-        .content {
-          padding: 20px;
-          font-size: 16px;
-          color: #333333;
-          line-height: 1.5;
-        }
-        .footer {
-          padding: 10px 20px;
-          text-align: center;
-          font-size: 12px;
-          color: #999999;
-          border-top: 1px solid #eeeeee;
-        }
-        @media only screen and (max-width: 600px) {
-          .container {
-            width: 95%;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">📩 Scheduled Message</div>
-        <div class="content">
-          <p>Hello,</p>
-          <p>Here is your scheduled message:</p>
-          <blockquote style="background:#f9f9f9;padding:10px;border-left:5px solid #4f46e5;">
-            ${msg.message}
-          </blockquote>
-          <p>Sent at: ${nowPakistan}</p>
-        </div>
-        <div class="footer">Message Scheduler • Your automated reminder system</div>
-      </div>
-    </body>
-    </html>
-    `
-                            });
-
-                            console.log("📩 Email actually sent:", info.messageId);
-                        } catch (error) {
-                            console.error("❌ Failed to send email:", error);
-                        }
-                    });
-
+                    // Send Discord message
+                    await sendDiscordMessage(
+                        process.env.DISCORD_USER_ID,
+                        `📩 Scheduled Message:\n${msg.message}`
+                    );
 
                     // Mark as sent
                     msg.isSend = true;
@@ -148,7 +99,7 @@ cron.schedule("* * * * *", async () => {
                     await msg.save();
                 }
             } catch (err) {
-                console.error(`❌ Failed to send email for message ${msg._id}:`, err);
+                console.error(`❌ Failed to process message ${msg._id}:`, err);
             }
         }
 
@@ -172,7 +123,7 @@ cron.schedule("* * * * *", async () => {
 
 // Basic API route
 app.get("/", (req, res) => {
-    res.send("🚀 Express cron app running");
+    res.send("🚀 Express cron app with Discord bot running");
 });
 
 // Start server
