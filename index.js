@@ -126,6 +126,31 @@ app.get("/", (req, res) => {
     res.send("🚀 Express cron app with Discord bot running");
 });
 
+// API route to delete all bot messages from DM
+app.delete("/delete-dm-messages", async (req, res) => {
+    try {
+        const user = await discordClient.users.fetch(process.env.DISCORD_USER_ID);
+        const dmChannel = await user.createDM();
+
+        // Fetch recent messages (you can increase the limit up to 100 at a time)
+        const messages = await dmChannel.messages.fetch({ limit: 100 });
+
+        // Filter only messages sent by the bot
+        const botMessages = messages.filter(msg => msg.author.id === discordClient.user.id);
+
+        // Delete each message
+        for (const [id, msg] of botMessages) {
+            await msg.delete().catch(err => console.error("⚠️ Delete error:", err));
+        }
+
+        res.json({ success: true, deletedCount: botMessages.size });
+    } catch (error) {
+        console.error("❌ Failed to delete messages:", error);
+        res.status(500).json({ success: false, error: "Failed to delete messages" });
+    }
+});
+
+
 // Start server
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
